@@ -1,20 +1,54 @@
 package main
 
-/*
-=== Утилита telnet ===
-
-Реализовать примитивный telnet клиент:
-Примеры вызовов:
-go-telnet --timeout=10s host port go-telnet mysite.ru 8080 go-telnet --timeout=3s 1.1.1.1 123
-
-Программа должна подключаться к указанному хосту (ip или доменное имя) и порту по протоколу TCP.
-После подключения STDIN программы должен записываться в сокет, а данные полученные и сокета должны выводиться в STDOUT
-Опционально в программу можно передать таймаут на подключение к серверу (через аргумент --timeout, по умолчанию 10s).
-
-При нажатии Ctrl+D программа должна закрывать сокет и завершаться. Если сокет закрывается со стороны сервера, программа должна также завершаться.
-При подключении к несуществующему сервер, программа должна завершаться через timeout.
-*/
+import (
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
 
 func main() {
-
+	host := flag.String("host", "", "Target host (IP or domain name)")
+	port := flag.Int("port", 0, "Target port")
+	timeout := flag.Duration("timeout", 10*time.Second, "Connection timeout")
+	flag.Parse()
+	if *host == "" || *port == 0 {
+		fmt.Println("Usage: go-telnet --host <host> --port <port> [--timeout <timeout>]")
+		os.Exit(1)
+	}
+	serverAddr := fmt.Sprintf("%s:%d", *host, *port)
+	conn, err := net.DialTimeout("tcp", serverAddr, *timeout)
+	if err != nil {
+		fmt.Printf("Error connecting to %s: %v\n", serverAddr, err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+	done := make(chan struct{})
+	go func() {
+		_, err := io.Copy(conn, os.Stdin)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+		done <- struct{}{}
+	}()
+	go func() {
+		_, err := io.Copy(os.Stdout, conn)
+		if err != nil {
+			log.Fatal(err.Error())
+			return
+		}
+		done <- struct{}{}
+	}()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	select {
+	case <-done:
+	case <-signals:
+	}
 }

@@ -1,18 +1,28 @@
 package main
 
-/*
-=== Утилита cut ===
-
-Принимает STDIN, разбивает по разделителю (TAB) на колонки, выводит запрошенные
-
-Поддержать флаги:
--f - "fields" - выбрать поля (колонки)
--d - "delimiter" - использовать другой разделитель
--s - "separated" - только строки с разделителем
-
-Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
-*/
+import (
+	"bufio"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+)
 
 func main() {
-
+	dFlag := flag.String("dFlag", " ", "separator")
+	fFlag := flag.Int("fFlag", 1, "fields")
+	sFlag := flag.Bool("sFlag", false, "separated")
+	flag.Parse()
+	strScan := bufio.NewScanner(os.Stdin)
+	for strScan.Scan() {
+		text := strScan.Text()
+		columns := slices.DeleteFunc[[]string, string](strings.Split(text, *dFlag), func(s string) bool {
+			return s == ""
+		})
+		if len(columns) < *fFlag || (*sFlag && !strings.Contains(text, *dFlag)) {
+			continue
+		}
+		fmt.Println(columns[*fFlag-1])
+	}
 }
